@@ -1,5 +1,7 @@
 // src/app/admin/login/page.tsx
+export const dynamic = "force-dynamic";
 "use client";
+
 
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
