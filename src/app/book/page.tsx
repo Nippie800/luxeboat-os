@@ -10,16 +10,10 @@ import {
   getDocs,
   query,
   where,
-  serverTimestamp,
-  addDoc,
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
-import {
-  generateSlots,
-  type GeneralSettings,
-  type BookingLite,
-} from "@/lib/slots";
+import { generateSlots, type GeneralSettings, type BookingLite } from "@/lib/slots";
 
 const DEFAULTS: GeneralSettings = {
   rideDurationMinutes: 45,
@@ -36,7 +30,6 @@ const DEFAULTS: GeneralSettings = {
 };
 
 type PartySize = 2 | 4 | 6;
-
 type PackageTier = "bronze" | "silver" | "gold" | "platinum";
 
 type AddOnId =
@@ -51,40 +44,33 @@ const BASE_RIDE_PRICE: Record<PartySize, number> = {
   6: 5200,
 };
 
-// Add-on prices (as provided)
 const ADD_ONS: Record<AddOnId, { label: string; price: number }> = {
   drink_alcoholic: { label: "Alcoholic Drinks", price: 300 },
-  drink_nonalcoholic: { label: "Non-Alcoholic Drinks", price: 130 }, // default (Silver/Platinum)
+  drink_nonalcoholic: { label: "Non-Alcoholic Drinks", price: 130 },
   platter: { label: "Platter", price: 400 },
   fruit_kebab: { label: "Fruit Kebab", price: 220 },
 };
 
-// Gold has Non-alcoholic = 120 (special case)
 const GOLD_NONALC_PRICE = 120;
 
-// Which add-ons are allowed per tier
 const TIER_RULES: Record<
   PackageTier,
   { title: string; subtitle: string; allowedAddOns: AddOnId[] }
 > = {
-  bronze: {
-    title: "Bronze",
-    subtitle: "Boat ride only",
-    allowedAddOns: [],
-  },
+  bronze: { title: "Bronze", subtitle: "Boat ride only", allowedAddOns: [] },
   silver: {
     title: "Silver",
-    subtitle: "Includes drink option",
+    subtitle: "Includes drink options",
     allowedAddOns: ["drink_alcoholic", "drink_nonalcoholic"],
   },
   gold: {
     title: "Gold",
-    subtitle: "Includes snacks & bubbles + drink option + fruit kebab option",
+    subtitle: "Includes snacks & bubbles + drink options + fruit kebab option",
     allowedAddOns: ["drink_alcoholic", "drink_nonalcoholic", "fruit_kebab"],
   },
   platinum: {
     title: "Platinum",
-    subtitle: "Includes platter & bubbles + drink option + platter option",
+    subtitle: "Includes platter & bubbles + drink options + platter option",
     allowedAddOns: ["drink_alcoholic", "drink_nonalcoholic", "platter"],
   },
 };
@@ -111,7 +97,6 @@ export default function BookPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // init date
   useEffect(() => {
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -120,7 +105,6 @@ export default function BookPage() {
     setDate(`${yyyy}-${mm}-${dd}`);
   }, []);
 
-  // load settings once
   useEffect(() => {
     async function loadSettings() {
       const ref = doc(db, "settings", "generalSettings");
@@ -130,7 +114,6 @@ export default function BookPage() {
     loadSettings();
   }, []);
 
-  // load bookings for selected date
   useEffect(() => {
     async function loadBookings() {
       if (!date) return;
@@ -149,27 +132,21 @@ export default function BookPage() {
     loadBookings();
   }, [date]);
 
-  // slots
   const slots = useMemo(() => {
     if (!date) return [];
     return generateSlots(date, settings, bookings);
   }, [date, settings, bookings]);
 
-  // when tier changes, remove add-ons that are not allowed in that tier
   useEffect(() => {
     const allowed = new Set(TIER_RULES[tier].allowedAddOns);
     setSelectedAddOns((prev) => prev.filter((id) => allowed.has(id)));
   }, [tier]);
 
-  // compute totals
   const baseAmount = useMemo(() => BASE_RIDE_PRICE[partySize], [partySize]);
 
   const addOnsTotal = useMemo(() => {
     return selectedAddOns.reduce((sum, id) => {
-      // gold has special non-alc pricing
-      if (tier === "gold" && id === "drink_nonalcoholic") {
-        return sum + GOLD_NONALC_PRICE;
-      }
+      if (tier === "gold" && id === "drink_nonalcoholic") return sum + GOLD_NONALC_PRICE;
       return sum + ADD_ONS[id].price;
     }, 0);
   }, [selectedAddOns, tier]);
@@ -180,12 +157,8 @@ export default function BookPage() {
     return Math.round((totalAmount * settings.depositPercentage) / 100);
   }, [totalAmount, settings.depositPercentage]);
 
-  // helpers
   function toggleAddOn(id: AddOnId) {
-    setSelectedAddOns((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      return [...prev, id];
-    });
+    setSelectedAddOns((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   function isAllowedAddOn(id: AddOnId) {
@@ -199,65 +172,114 @@ export default function BookPage() {
     phone.trim().length >= 8 &&
     !saving;
 
-  async function createBooking() {
-    setSaving(true);
-    setMessage(null);
+ async function createBookingAndPay() {
+  setSaving(true);
+  setMessage(null);
 
-    try {
-      const slotAvailable = slots.find((s) => s.time === timeSlot)?.available;
-      if (!slotAvailable) {
-        setMessage("That slot was just taken. Please choose another.");
-        return;
+  try {
+    // 0) Quick client-side check
+    const slotAvailable = slots.find((s) => s.time === timeSlot)?.available;
+    if (!slotAvailable) {
+      setMessage("That slot was just taken. Please choose another.");
+      return;
+    }
+
+    // 1) Build add-ons
+    const addOnsDetailed = selectedAddOns.map((id) => {
+      const price =
+        tier === "gold" && id === "drink_nonalcoholic"
+          ? GOLD_NONALC_PRICE
+          : ADD_ONS[id].price;
+
+      return { id, label: ADD_ONS[id].label, price };
+    });
+
+    // Helper to safely parse JSON even when API returns HTML/error
+    const safeJson = async (res: Response) => {
+      try {
+        return await res.json();
+      } catch {
+        return null;
       }
+    };
 
-      // Store human-readable add-ons for admin view later
-      const addOnsDetailed = selectedAddOns.map((id) => {
-        const price =
-          tier === "gold" && id === "drink_nonalcoholic"
-            ? GOLD_NONALC_PRICE
-            : ADD_ONS[id].price;
-
-        return { id, label: ADD_ONS[id].label, price };
-      });
-
-      await addDoc(collection(db, "bookings"), {
+    // 2) Create HOLD booking + slot lock (server-side)
+    const createRes = await fetch("/api/bookings/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         name: name.trim(),
         phone: phone.trim(),
         date,
         timeSlot,
         guests: partySize,
-
-        tier, // bronze/silver/gold/platinum
+        tier,
         addOns: addOnsDetailed,
         baseAmount,
         addOnsTotal,
-
         totalAmount,
         depositAmount,
-
-        status: "pending_payment",
-        createdAt: serverTimestamp(),
-
-        // policies (useful later for receipts)
         policies: {
           lateCancelMinutes: 30,
           noRefund: true,
           weatherHyacinthConfirmation: true,
         },
-      });
+      }),
+    });
 
-      setMessage("Booking created ✅ (pending payment)");
-      setTimeSlot("");
-      setName("");
-      setPhone("");
-      setTier("bronze");
-      setSelectedAddOns([]);
-    } catch (err: any) {
-      setMessage(err?.message ?? "Booking failed");
-    } finally {
-      setSaving(false);
+    const createJson = await safeJson(createRes);
+
+    if (!createRes.ok) {
+      setMessage(createJson?.error ?? `Could not create booking (${createRes.status})`);
+      return;
     }
+
+    const bookingId = String(createJson?.bookingId ?? "").trim();
+    if (!bookingId) {
+      setMessage("Booking created but bookingId is missing. Please try again.");
+      return;
+    }
+
+    // 3) Initiate PayFast
+    // IMPORTANT: send amount as STRING, and make sure it's valid
+    const amountStr = String(depositAmount);
+    if (!amountStr || Number(amountStr) <= 0) {
+      setMessage("Deposit amount is invalid. Please try again.");
+      return;
+    }
+
+    const pfRes = await fetch("/api/payfast/initiate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bookingId,
+        amount: amountStr,
+        itemName: `Boat Ride Deposit (${date} ${timeSlot})`,
+      }),
+    });
+
+    const pfJson = await safeJson(pfRes);
+
+    if (!pfRes.ok) {
+      setMessage(pfJson?.error ?? `Could not start payment (${pfRes.status})`);
+      return;
+    }
+
+    const redirectUrl = String(pfJson?.redirectUrl ?? "").trim();
+    if (!redirectUrl) {
+      setMessage("Payment link missing. Please try again.");
+      return;
+    }
+
+    // 4) Redirect to PayFast
+    window.location.href = redirectUrl;
+
+  } catch (err: any) {
+    setMessage(err?.message ?? "Something went wrong");
+  } finally {
+    setSaving(false);
   }
+}
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -265,16 +287,12 @@ export default function BookPage() {
         <div className="bg-white rounded-2xl shadow p-6">
           <h1 className="text-2xl font-semibold">Book a Boat Ride</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Secure your slot with a {settings.depositPercentage}% deposit.
-            Please arrive 15 minutes early.
+            Secure your slot with a {settings.depositPercentage}% deposit. Please arrive 15 minutes early.
           </p>
 
           <div className="space-y-5 mt-6">
-            {/* DATE */}
             <div>
-              <label htmlFor="date" className="block text-sm font-medium">
-                Select Date
-              </label>
+              <label htmlFor="date" className="block text-sm font-medium">Select Date</label>
               <input
                 id="date"
                 type="date"
@@ -284,12 +302,8 @@ export default function BookPage() {
               />
             </div>
 
-            {/* TIME SLOTS */}
             <div>
-              <label className="block text-sm font-medium">
-                Available Time Slots
-              </label>
-
+              <label className="block text-sm font-medium">Available Time Slots</label>
               {loadingSlots ? (
                 <p className="text-sm text-gray-500 mt-2">Loading slots...</p>
               ) : (
@@ -299,36 +313,26 @@ export default function BookPage() {
                       key={slot.time}
                       disabled={!slot.available}
                       onClick={() => setTimeSlot(slot.time)}
-                      className={`rounded-xl border p-2 text-sm 
-                      ${timeSlot === slot.time ? "border-black" : "border-gray-200"}
-                      ${
-                        slot.available
-                          ? "bg-white"
-                          : "bg-gray-100 text-gray-400"
-                      }`}
+                      className={`rounded-xl border p-2 text-sm
+                        ${timeSlot === slot.time ? "border-black" : "border-gray-200"}
+                        ${slot.available ? "bg-white" : "bg-gray-100 text-gray-400"}`}
                     >
                       {slot.time}
                     </button>
                   ))}
                 </div>
               )}
-
               <div className="mt-2 text-xs text-gray-500">
                 Late policy: after 30 minutes, booking is cancelled. No refunds.
               </div>
             </div>
 
-            {/* PARTY SIZE */}
             <div>
-              <label htmlFor="partySize" className="block text-sm font-medium">
-                Party Size (Bronze Ride Price)
-              </label>
+              <label htmlFor="partySize" className="block text-sm font-medium">Party Size (Bronze Ride Price)</label>
               <select
                 id="partySize"
                 value={partySize}
-                onChange={(e) =>
-                  setPartySize(Number(e.target.value) as PartySize)
-                }
+                onChange={(e) => setPartySize(Number(e.target.value) as PartySize)}
                 className="w-full mt-1 border rounded-xl p-3"
               >
                 <option value={2}>2 Guests — {formatMoney(1900)}</option>
@@ -337,11 +341,8 @@ export default function BookPage() {
               </select>
             </div>
 
-            {/* PACKAGE TIER */}
             <div>
-              <label htmlFor="tier" className="block text-sm font-medium">
-                Package
-              </label>
+              <label htmlFor="tier" className="block text-sm font-medium">Package</label>
               <select
                 id="tier"
                 value={tier}
@@ -353,59 +354,37 @@ export default function BookPage() {
                 <option value="gold">Gold — Snacks & bubbles</option>
                 <option value="platinum">Platinum — Platter & bubbles</option>
               </select>
-
-              <div className="mt-2 text-xs text-gray-500">
-                {TIER_RULES[tier].subtitle}
-              </div>
+              <div className="mt-2 text-xs text-gray-500">{TIER_RULES[tier].subtitle}</div>
             </div>
 
-            {/* ADD-ONS (unlocked by tier) */}
             <div className="border rounded-xl p-4 bg-gray-50">
               <div className="text-sm font-medium">Add-Ons</div>
               <div className="mt-2 space-y-2">
-                {/* Drinks */}
                 <AddOnRow
-                  id="drink_alcoholic"
-                  tier={tier}
                   checked={selectedAddOns.includes("drink_alcoholic")}
                   allowed={isAllowedAddOn("drink_alcoholic")}
-                  label={`${ADD_ONS.drink_alcoholic.label} — ${formatMoney(
-                    ADD_ONS.drink_alcoholic.price
-                  )}`}
+                  label={`${ADD_ONS.drink_alcoholic.label} — ${formatMoney(ADD_ONS.drink_alcoholic.price)}`}
                   onToggle={() => toggleAddOn("drink_alcoholic")}
                 />
 
                 <AddOnRow
-                  id="drink_nonalcoholic"
-                  tier={tier}
                   checked={selectedAddOns.includes("drink_nonalcoholic")}
                   allowed={isAllowedAddOn("drink_nonalcoholic")}
-                  label={`Non-Alcoholic Drinks — ${formatMoney(
-                    tier === "gold" ? GOLD_NONALC_PRICE : ADD_ONS.drink_nonalcoholic.price
-                  )}`}
+                  label={`Non-Alcoholic Drinks — ${formatMoney(tier === "gold" ? GOLD_NONALC_PRICE : ADD_ONS.drink_nonalcoholic.price)}`}
                   onToggle={() => toggleAddOn("drink_nonalcoholic")}
                 />
 
-                {/* Gold/Platinum extras */}
                 <AddOnRow
-                  id="fruit_kebab"
-                  tier={tier}
                   checked={selectedAddOns.includes("fruit_kebab")}
                   allowed={isAllowedAddOn("fruit_kebab")}
-                  label={`${ADD_ONS.fruit_kebab.label} — ${formatMoney(
-                    ADD_ONS.fruit_kebab.price
-                  )}`}
+                  label={`${ADD_ONS.fruit_kebab.label} — ${formatMoney(ADD_ONS.fruit_kebab.price)}`}
                   onToggle={() => toggleAddOn("fruit_kebab")}
                 />
 
                 <AddOnRow
-                  id="platter"
-                  tier={tier}
                   checked={selectedAddOns.includes("platter")}
                   allowed={isAllowedAddOn("platter")}
-                  label={`${ADD_ONS.platter.label} — ${formatMoney(
-                    ADD_ONS.platter.price
-                  )}`}
+                  label={`${ADD_ONS.platter.label} — ${formatMoney(ADD_ONS.platter.price)}`}
                   onToggle={() => toggleAddOn("platter")}
                 />
 
@@ -417,12 +396,9 @@ export default function BookPage() {
               </div>
             </div>
 
-            {/* NAME + PHONE */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium">
-                  Name
-                </label>
+                <label htmlFor="name" className="block text-sm font-medium">Name</label>
                 <input
                   id="name"
                   value={name}
@@ -433,9 +409,7 @@ export default function BookPage() {
               </div>
 
               <div>
-                <label htmlFor="phone" className="block text-sm font-medium">
-                  Phone
-                </label>
+                <label htmlFor="phone" className="block text-sm font-medium">Phone</label>
                 <input
                   id="phone"
                   value={phone}
@@ -446,13 +420,11 @@ export default function BookPage() {
               </div>
             </div>
 
-            {/* TOTALS */}
             <div className="border rounded-xl p-4 bg-gray-50 text-sm">
               <div className="flex justify-between">
                 <span>Base Ride</span>
                 <span className="font-semibold">{formatMoney(baseAmount)}</span>
               </div>
-
               <div className="flex justify-between mt-2">
                 <span>Add-Ons</span>
                 <span className="font-semibold">{formatMoney(addOnsTotal)}</span>
@@ -464,27 +436,22 @@ export default function BookPage() {
                 <span>Total</span>
                 <span className="font-semibold">{formatMoney(totalAmount)}</span>
               </div>
-
               <div className="flex justify-between mt-2">
                 <span>Deposit ({settings.depositPercentage}%)</span>
-                <span className="font-semibold">
-                  {formatMoney(depositAmount)}
-                </span>
+                <span className="font-semibold">{formatMoney(depositAmount)}</span>
               </div>
 
               <div className="mt-3 text-xs text-gray-600">
-                Due to weather + water hyacinth conditions, confirmation will be
-                sent a few hours before your booking.
+                Due to weather + water hyacinth conditions, confirmation will be sent a few hours before your booking.
               </div>
             </div>
 
-            {/* CTA */}
             <button
-              onClick={createBooking}
+              onClick={createBookingAndPay}
               disabled={!canSubmit}
               className="w-full bg-black text-white p-3 rounded-xl disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Proceed to Payment (Coming Soon)"}
+              {saving ? "Redirecting to payment..." : "Pay Deposit Now →"}
             </button>
 
             {message && <p className="text-sm text-gray-700">{message}</p>}
@@ -500,39 +467,23 @@ export default function BookPage() {
 }
 
 function AddOnRow({
-  id,
-  tier,
   checked,
   allowed,
   label,
   onToggle,
 }: {
-  id: string;
-  tier: string;
   checked: boolean;
   allowed: boolean;
   label: string;
   onToggle: () => void;
 }) {
   return (
-    <label
-      className={`flex items-center justify-between rounded-xl border p-3 ${
-        allowed ? "bg-white" : "bg-gray-100 text-gray-400"
-      }`}
-    >
+    <label className={`flex items-center justify-between rounded-xl border p-3 ${allowed ? "bg-white" : "bg-gray-100 text-gray-400"}`}>
       <div className="flex items-center gap-3">
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={!allowed}
-          onChange={onToggle}
-        />
+        <input type="checkbox" checked={checked} disabled={!allowed} onChange={onToggle} />
         <div className="text-sm">{label}</div>
       </div>
-
-      {!allowed && (
-        <span className="text-[11px] text-gray-400">Upgrade package</span>
-      )}
+      {!allowed && <span className="text-[11px] text-gray-400">Upgrade package</span>}
     </label>
   );
 }
