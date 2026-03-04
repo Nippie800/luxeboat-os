@@ -1,5 +1,6 @@
-export const dynamic = "force-dynamic";
+
 "use client";
+export const dynamic = "force-dynamic";
 
 import { AdminGuard } from "@/components/AdminGuard";
 import { db } from "@/lib/firebase";
