@@ -1,19 +1,19 @@
-"use client";
-
 import Link from "next/link";
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-function SuccessContent() {
-  const params = useSearchParams();
-  const bookingId = params.get("bookingId");
+export default function PaymentSuccessPage({
+  searchParams,
+}: {
+  searchParams: { bookingId?: string };
+}) {
+  const bookingId = searchParams.bookingId;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl shadow p-6 max-w-md w-full text-center">
         <h1 className="text-2xl font-semibold">Payment Submitted ✅</h1>
+
         <p className="text-sm text-gray-600 mt-2">
           Thanks! Your deposit payment was submitted successfully.
         </p>
@@ -29,18 +29,18 @@ function SuccessContent() {
           Final confirmation will be sent after payment verification.
         </p>
 
-        <Link href="/" className="inline-block mt-6 bg-black text-white px-4 py-2 rounded-xl">
-          Back to Home
-        </Link>
+        <div className="mt-6 flex justify-center gap-3">
+          <Link
+            href="/book"
+            className="bg-black text-white px-4 py-2 rounded-xl"
+          >
+            Book Another Ride
+          </Link>
+          <Link href="/" className="border px-4 py-2 rounded-xl">
+            Home
+          </Link>
+        </div>
       </div>
     </div>
-  );
-}
-
-export default function PaymentSuccessPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading…</div>}>
-      <SuccessContent />
-    </Suspense>
   );
 }
