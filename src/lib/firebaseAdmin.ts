@@ -1,22 +1,42 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
+
+let _app: App | null = null;
+let _db: Firestore | null = null;
 
 function getPrivateKey() {
   const key = process.env.FIREBASE_PRIVATE_KEY;
-  if (!key) return "";
-  // Vercel stores multiline keys with \n, we need to convert them back
-  return key.replace(/\\n/g, "\n");
+  return key ? key.replace(/\\n/g, "\n") : "";
 }
 
-export const adminApp =
-  getApps().length > 0
-    ? getApps()[0]
-    : initializeApp({
-        credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: getPrivateKey(),
-        }),
-      });
+function requireEnv(name: string) {
+  const v = process.env[name];
+  if (!v) {
+    // IMPORTANT: don't crash build-time imports; only throw when actually used.
+    throw new Error(`Missing env var: ${name}`);
+  }
+  return v;
+}
 
-export const adminDb = getFirestore(adminApp);
+export function getAdminDb() {
+  if (_db) return _db;
+
+  const projectId = requireEnv("FIREBASE_PROJECT_ID");
+  const clientEmail = requireEnv("FIREBASE_CLIENT_EMAIL");
+  const privateKey = getPrivateKey();
+  if (!privateKey) throw new Error("Missing env var: FIREBASE_PRIVATE_KEY");
+
+  _app =
+    getApps().length > 0
+      ? getApps()[0]
+      : initializeApp({
+          credential: cert({
+            projectId,
+            clientEmail,
+            privateKey,
+          }),
+        });
+
+  _db = getFirestore(_app);
+  return _db;
+}
