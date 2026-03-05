@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default function PaymentSuccessPage() {
+function SuccessContent() {
   const params = useSearchParams();
   const bookingId = params.get("bookingId");
 
@@ -19,7 +20,8 @@ export default function PaymentSuccessPage() {
 
         {bookingId && (
           <p className="mt-3 text-sm">
-            Booking reference: <span className="font-semibold">{bookingId}</span>
+            Booking reference:{" "}
+            <span className="font-semibold">{bookingId}</span>
           </p>
         )}
 
@@ -27,13 +29,18 @@ export default function PaymentSuccessPage() {
           Final confirmation will be sent after payment verification.
         </p>
 
-        <Link
-          href="/"
-          className="inline-block mt-6 bg-black text-white px-4 py-2 rounded-xl"
-        >
+        <Link href="/" className="inline-block mt-6 bg-black text-white px-4 py-2 rounded-xl">
           Back to Home
         </Link>
       </div>
     </div>
+  );
+}
+
+export default function PaymentSuccessPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading…</div>}>
+      <SuccessContent />
+    </Suspense>
   );
 }

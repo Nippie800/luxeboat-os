@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default function PaymentCancelPage() {
+function CancelContent() {
   const params = useSearchParams();
   const bookingId = params.get("bookingId");
 
@@ -19,25 +20,28 @@ export default function PaymentCancelPage() {
 
         {bookingId && (
           <p className="mt-3 text-sm">
-            Booking reference: <span className="font-semibold">{bookingId}</span>
+            Booking reference:{" "}
+            <span className="font-semibold">{bookingId}</span>
           </p>
         )}
 
         <div className="mt-6 flex gap-3 justify-center">
-          <Link
-            href="/book"
-            className="bg-black text-white px-4 py-2 rounded-xl"
-          >
+          <Link href="/book" className="bg-black text-white px-4 py-2 rounded-xl">
             Try Again
           </Link>
-          <Link
-            href="/"
-            className="border px-4 py-2 rounded-xl"
-          >
+          <Link href="/" className="border px-4 py-2 rounded-xl">
             Home
           </Link>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PaymentCancelPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading…</div>}>
+      <CancelContent />
+    </Suspense>
   );
 }
