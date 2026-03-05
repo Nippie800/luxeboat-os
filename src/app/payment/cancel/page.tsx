@@ -1,33 +1,39 @@
-export const dynamic = "force-dynamic";
+"use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
-export default async function PaymentCancelPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ bookingId?: string }>;
-}) {
-  const { bookingId } = await searchParams;
+export const dynamic = "force-dynamic";
+
+export default function PaymentCancelPage() {
+  const params = useSearchParams();
+  const bookingId = params.get("bookingId");
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow p-8 max-w-md w-full text-center">
+      <div className="bg-white rounded-2xl shadow p-6 max-w-md w-full text-center">
         <h1 className="text-2xl font-semibold">Payment Cancelled</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          No stress — your slot will only be held for a short time. If you still want it, please try again.
+        <p className="text-sm text-gray-600 mt-2">
+          You cancelled the payment or it did not complete.
         </p>
 
         {bookingId && (
-          <div className="mt-4 text-xs text-gray-500">
-            Ref: <span className="font-mono">{bookingId}</span>
-          </div>
+          <p className="mt-3 text-sm">
+            Booking reference: <span className="font-semibold">{bookingId}</span>
+          </p>
         )}
 
         <div className="mt-6 flex gap-3 justify-center">
-          <Link href="/book" className="bg-black text-white px-5 py-3 rounded-xl">
+          <Link
+            href="/book"
+            className="bg-black text-white px-4 py-2 rounded-xl"
+          >
             Try Again
           </Link>
-          <Link href="/" className="px-5 py-3 rounded-xl border">
+          <Link
+            href="/"
+            className="border px-4 py-2 rounded-xl"
+          >
             Home
           </Link>
         </div>
