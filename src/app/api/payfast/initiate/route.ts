@@ -3,22 +3,22 @@ import crypto from "crypto";
 
 export const runtime = "nodejs";
 
-function pfEncode(val: string) {
-  return encodeURIComponent(val.trim());
+function pfEncode(value: string) {
+  // PayFast-style encoding:
+  // - spaces become '+'
+  // - percent encodings are uppercase
+  let encoded = encodeURIComponent(value.trim());
+  encoded = encoded.replace(/%20/g, "+");
+  encoded = encoded.replace(/%[0-9a-f]{2}/g, (m) => m.toUpperCase());
+  return encoded;
 }
 
-function buildSignature(data: Record<string, string>, passphrase?: string) {
-  const keys = Object.keys(data).sort();
-  const paramString = keys
-    .filter((k) => data[k] !== "" && k !== "signature")
+function buildParamString(data: Record<string, string>) {
+  return Object.keys(data)
+    .sort()
+    .filter((k) => k !== "signature" && data[k] !== "")
     .map((k) => `${k}=${pfEncode(data[k])}`)
     .join("&");
-
-  const withPass = passphrase
-    ? `${paramString}&passphrase=${pfEncode(passphrase)}`
-    : paramString;
-
-  return crypto.createHash("md5").update(withPass).digest("hex");
 }
 
 export async function POST(req: Request) {
@@ -40,14 +40,22 @@ export async function POST(req: Request) {
     );
   }
 
-  const merchant_id = process.env.PAYFAST_MERCHANT_ID!;
-  const merchant_key = process.env.PAYFAST_MERCHANT_KEY!;
-  const passphrase = process.env.PAYFAST_PASSPHRASE || "";
+  const merchant_id = String(process.env.PAYFAST_MERCHANT_ID ?? "").trim();
+  const merchant_key = String(process.env.PAYFAST_MERCHANT_KEY ?? "").trim();
+  const passphrase = String(process.env.PAYFAST_PASSPHRASE ?? "").trim();
 
   const processUrl =
-    process.env.PAYFAST_PROCESS_URL || "https://sandbox.payfast.co.za/eng/process";
+    String(process.env.PAYFAST_PROCESS_URL ?? "").trim() ||
+    "https://sandbox.payfast.co.za/eng/process";
 
-  const appUrl = process.env.APP_URL!;
+  const appUrl = String(process.env.APP_URL ?? "").trim();
+
+  if (!merchant_id || !merchant_key || !appUrl) {
+    return NextResponse.json(
+      { error: "Server missing PAYFAST_MERCHANT_ID/PAYFAST_MERCHANT_KEY/APP_URL" },
+      { status: 500 }
+    );
+  }
 
   const return_url = `${appUrl}/payment/success?bookingId=${encodeURIComponent(bookingId)}`;
   const cancel_url = `${appUrl}/payment/cancel?bookingId=${encodeURIComponent(bookingId)}`;
@@ -64,10 +72,19 @@ export async function POST(req: Request) {
     item_name: itemName,
   };
 
-  data.signature = buildSignature(data, passphrase);
+  // 1) Build param string with PayFast encoding
+  const paramString = buildParamString(data);
 
-  const qs = new URLSearchParams(data).toString();
-  const redirectUrl = `${processUrl}?${qs}`;
+  // 2) Signature base string (append passphrase ONLY if you set one in PayFast)
+  const sigBase = passphrase
+    ? `${paramString}&passphrase=${pfEncode(passphrase)}`
+    : paramString;
+
+  // 3) MD5 signature (lowercase hex)
+  const signature = crypto.createHash("md5").update(sigBase).digest("hex");
+
+  // 4) Redirect URL
+  const redirectUrl = `${processUrl}?${paramString}&signature=${signature}`;
 
   return NextResponse.json({ redirectUrl }, { status: 200 });
 }
