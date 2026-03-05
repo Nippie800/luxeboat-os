@@ -2,21 +2,23 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
+// PayFast-style encoding:
+// - spaces as '+'
+// - percent encodings UPPERCASE
 function pfEncode(value: string) {
-  // PayFast-style encoding:
-  // - spaces become '+'
-  // - percent encodings are uppercase
   let encoded = encodeURIComponent(value.trim());
   encoded = encoded.replace(/%20/g, "+");
   encoded = encoded.replace(/%[0-9a-f]{2}/g, (m) => m.toUpperCase());
   return encoded;
 }
 
+// Build the exact param string PayFast expects (sorted keys)
 function buildParamString(data: Record<string, string>) {
   return Object.keys(data)
     .sort()
-    .filter((k) => k !== "signature" && data[k] !== "")
+    .filter((k) => data[k] !== "" && k !== "signature")
     .map((k) => `${k}=${pfEncode(data[k])}`)
     .join("&");
 }
@@ -34,14 +36,13 @@ export async function POST(req: Request) {
   const itemName = String(body?.itemName ?? "Boat Ride Deposit").trim();
 
   if (!bookingId || !Number.isFinite(amountNum) || amountNum <= 0) {
-    return NextResponse.json(
-      { error: "Missing bookingId/amount", received: { bookingId, amount: body?.amount } },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing bookingId/amount" }, { status: 400 });
   }
 
   const merchant_id = String(process.env.PAYFAST_MERCHANT_ID ?? "").trim();
   const merchant_key = String(process.env.PAYFAST_MERCHANT_KEY ?? "").trim();
+
+  // MUST match PayFast dashboard EXACTLY (case + no spaces)
   const passphrase = String(process.env.PAYFAST_PASSPHRASE ?? "").trim();
 
   const processUrl =
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
 
   if (!merchant_id || !merchant_key || !appUrl) {
     return NextResponse.json(
-      { error: "Server missing PAYFAST_MERCHANT_ID/PAYFAST_MERCHANT_KEY/APP_URL" },
+      { error: "Missing server env vars (merchant/app url)" },
       { status: 500 }
     );
   }
@@ -61,6 +62,7 @@ export async function POST(req: Request) {
   const cancel_url = `${appUrl}/payment/cancel?bookingId=${encodeURIComponent(bookingId)}`;
   const notify_url = `${appUrl}/api/payfast/notify`;
 
+  // IMPORTANT: values here must match exactly what we submit in the URL
   const data: Record<string, string> = {
     merchant_id,
     merchant_key,
@@ -72,19 +74,22 @@ export async function POST(req: Request) {
     item_name: itemName,
   };
 
-  // 1) Build param string with PayFast encoding
+  // 1) Build canonical param string
   const paramString = buildParamString(data);
 
-  // 2) Signature base string (append passphrase ONLY if you set one in PayFast)
+  // 2) Signature base string
   const sigBase = passphrase
     ? `${paramString}&passphrase=${pfEncode(passphrase)}`
     : paramString;
 
-  // 3) MD5 signature (lowercase hex)
+  // 3) md5 (lowercase)
   const signature = crypto.createHash("md5").update(sigBase).digest("hex");
 
-  // 4) Redirect URL
+  // 4) IMPORTANT: append signature WITHOUT changing encoding method
   const redirectUrl = `${processUrl}?${paramString}&signature=${signature}`;
 
-  return NextResponse.json({ redirectUrl }, { status: 200 });
+  return NextResponse.json(
+    { redirectUrl },
+    { status: 200 }
+  );
 }
