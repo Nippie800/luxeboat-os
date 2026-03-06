@@ -32,12 +32,12 @@ export default function AdminLoginPage() {
       <div className="bg-white rounded-2xl shadow p-6 max-w-md w-full">
         <h1 className="text-2xl font-semibold">Admin Login</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Use your admin email & password.
+          Use your admin email and password.
         </p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium" htmlFor="email">
+            <label htmlFor="email" className="block text-sm font-medium">
               Email
             </label>
             <input
@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium" htmlFor="password">
+            <label htmlFor="password" className="block text-sm font-medium">
               Password
             </label>
             <input
@@ -67,6 +67,7 @@ export default function AdminLoginPage() {
           </div>
 
           <button
+            type="submit"
             disabled={loading}
             className="w-full bg-black text-white p-3 rounded-xl disabled:opacity-50"
           >
