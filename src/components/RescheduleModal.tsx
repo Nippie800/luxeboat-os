@@ -171,19 +171,20 @@ export default function RescheduleModal({ booking, onClose, onDone }: Props) {
       const newBookingRef = doc(db, "bookings", newBookingId);
       const newLockRef = doc(db, "slotLocks", newBookingId);
 
-      await setDoc(
-        newBookingRef,
-        {
-          ...booking,
-          id: undefined,
-          date,
-          timeSlot,
-          status: "booked",
-          rescheduledFrom: booking.id,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      const { id, ...bookingWithoutId } = booking;
+
+await setDoc(
+  newBookingRef,
+  {
+    ...bookingWithoutId,
+    date,
+    timeSlot,
+    status: "booked",
+    rescheduledFrom: booking.id,
+    updatedAt: new Date().toISOString(),
+  },
+  { merge: true }
+);
 
       await setDoc(
         newLockRef,
