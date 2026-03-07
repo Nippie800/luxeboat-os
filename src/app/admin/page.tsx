@@ -12,6 +12,7 @@ import {
 import { db } from "@/lib/firebase";
 import AdminShell from "@/components/AdminShell";
 import BookingDetailModal from "@/components/BookingDetailModal";
+import RescheduleModal from "@/components/RescheduleModal";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,7 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -300,12 +302,21 @@ export default function AdminDashboardPage() {
                         </span>
                       </td>
                       <td className="py-4 px-4">
-                        <button
-                          onClick={() => setSelectedBooking(booking)}
-                          className="rounded-lg border px-3 py-2"
-                        >
-                          View Details
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedBooking(booking)}
+                            className="rounded-lg border px-3 py-2"
+                          >
+                            View Details
+                          </button>
+
+                          <button
+                            onClick={() => setRescheduleBooking(booking)}
+                            className="rounded-lg border px-3 py-2"
+                          >
+                            Reschedule
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -321,9 +332,22 @@ export default function AdminDashboardPage() {
         onClose={() => setSelectedBooking(null)}
         onConfirm={(id) => updateStatus(id, "confirmed")}
         onCancel={(id) => updateStatus(id, "cancelled")}
-        onReschedule={(id) => updateStatus(id, "booked")}
+        onReschedule={(id) => {
+          const booking = bookings.find((b) => b.id === id) || null;
+          setSelectedBooking(null);
+          setRescheduleBooking(booking);
+        }}
         onMarkCompleted={(id) => updateStatus(id, "completed")}
         onCopyMessage={copyConfirmationMessage}
+      />
+
+      <RescheduleModal
+        booking={rescheduleBooking}
+        onClose={() => setRescheduleBooking(null)}
+        onDone={() => {
+          loadBookings(date);
+          setMessage("Booking rescheduled ✅");
+        }}
       />
     </AdminShell>
   );
