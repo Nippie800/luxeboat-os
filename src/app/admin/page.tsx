@@ -13,6 +13,7 @@ import { db } from "@/lib/firebase";
 import AdminShell from "@/components/AdminShell";
 import BookingDetailModal from "@/components/BookingDetailModal";
 import RescheduleModal from "@/components/RescheduleModal";
+import { logBookingEvent } from "@/lib/bookingEvents";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +126,21 @@ export default function AdminDashboardPage() {
         await updateDoc(doc(db, "slotLocks", id), { status });
       } catch {
         // ignore if lock doc missing
+      }
+
+      const eventMessageMap: Record<string, string> = {
+        confirmed: "Booking confirmed by admin",
+        cancelled: "Booking cancelled by admin",
+        completed: "Booking marked as completed",
+        booked: "Booking status returned to booked",
+      };
+
+      if (eventMessageMap[status]) {
+        await logBookingEvent({
+          bookingId: id,
+          type: status as any,
+          message: eventMessageMap[status],
+        });
       }
 
       await loadBookings(date);

@@ -6,7 +6,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  // ✅ Lazy init (prevents build-time crash)
   const adminDb = getAdminDb();
 
   const bodyText = await req.text();
@@ -17,7 +16,6 @@ export async function POST(req: Request) {
 
   if (!bookingId) return new NextResponse("Missing m_payment_id", { status: 400 });
 
-  // NOTE: Later we should validate ITN signature too.
   if (payment_status === "COMPLETE") {
     const bookingRef = adminDb.collection("bookings").doc(bookingId);
     const lockRef = adminDb.collection("slotLocks").doc(bookingId);
@@ -39,6 +37,13 @@ export async function POST(req: Request) {
         },
         { merge: true }
       ),
+      adminDb.collection("bookingEvents").add({
+        bookingId,
+        type: "booked",
+        message: "Deposit paid successfully via PayFast",
+        actor: "system",
+        createdAt: FieldValue.serverTimestamp(),
+      }),
     ]);
   }
 

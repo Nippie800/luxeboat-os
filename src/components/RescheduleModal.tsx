@@ -12,7 +12,12 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { generateSlots, type BookingLite, type GeneralSettings } from "@/lib/slots";
+import {
+  generateSlots,
+  type BookingLite,
+  type GeneralSettings,
+} from "@/lib/slots";
+import { logBookingEvent } from "@/lib/bookingEvents";
 
 type Booking = {
   id: string;
@@ -112,8 +117,6 @@ export default function RescheduleModal({ booking, onClose, onDone }: Props) {
         const list: BookingLite[] = [];
         snap.forEach((d) => {
           const data = d.data() as any;
-
-          // exclude the booking currently being rescheduled
           if (d.id === booking.id) return;
 
           list.push({
@@ -168,7 +171,6 @@ export default function RescheduleModal({ booking, onClose, onDone }: Props) {
       const newBookingRef = doc(db, "bookings", newBookingId);
       const newLockRef = doc(db, "slotLocks", newBookingId);
 
-      // 1) Create new booking doc
       await setDoc(
         newBookingRef,
         {
@@ -183,7 +185,6 @@ export default function RescheduleModal({ booking, onClose, onDone }: Props) {
         { merge: true }
       );
 
-      // 2) Create new slot lock
       await setDoc(
         newLockRef,
         {
@@ -195,17 +196,27 @@ export default function RescheduleModal({ booking, onClose, onDone }: Props) {
         { merge: true }
       );
 
-      // 3) Mark old booking as cancelled / archived
       await updateDoc(oldBookingRef, {
         status: "cancelled",
         rescheduledTo: newBookingId,
         updatedAt: new Date().toISOString(),
       });
 
-      // 4) Release old slot lock
       await updateDoc(oldLockRef, {
         status: "cancelled",
         updatedAt: new Date().toISOString(),
+      });
+
+      await logBookingEvent({
+        bookingId: booking.id,
+        type: "rescheduled",
+        message: `Booking rescheduled from ${booking.date} ${booking.timeSlot} to ${date} ${timeSlot}`,
+      });
+
+      await logBookingEvent({
+        bookingId: newBookingId,
+        type: "booked",
+        message: `Booking created from reschedule of ${booking.id}`,
       });
 
       onDone();

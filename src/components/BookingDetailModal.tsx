@@ -1,5 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 type Booking = {
   id: string;
   name: string;
@@ -17,6 +27,14 @@ type Booking = {
     label: string;
     price: number;
   }>;
+};
+
+type BookingEvent = {
+  id: string;
+  type: string;
+  message: string;
+  actor?: string;
+  createdAt?: any;
 };
 
 type Props = {
@@ -50,6 +68,24 @@ function statusBadge(status: string) {
   }
 }
 
+function formatEventTime(value: any) {
+  try {
+    if (!value) return "Unknown time";
+
+    if (typeof value?.toDate === "function") {
+      return value.toDate().toLocaleString();
+    }
+
+    if (value?.seconds) {
+      return new Date(value.seconds * 1000).toLocaleString();
+    }
+
+    return String(value);
+  } catch {
+    return "Unknown time";
+  }
+}
+
 export default function BookingDetailModal({
   booking,
   onClose,
@@ -59,6 +95,43 @@ export default function BookingDetailModal({
   onReschedule,
   onCopyMessage,
 }: Props) {
+  const [events, setEvents] = useState<BookingEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+
+  useEffect(() => {
+    async function loadEvents() {
+      if (!booking) return;
+
+      setLoadingEvents(true);
+
+      try {
+        const q = query(
+          collection(db, "bookingEvents"),
+          where("bookingId", "==", booking.id),
+          orderBy("createdAt", "desc")
+        );
+
+        const snap = await getDocs(q);
+        const list: BookingEvent[] = [];
+
+        snap.forEach((d) => {
+          list.push({
+            id: d.id,
+            ...(d.data() as Omit<BookingEvent, "id">),
+          });
+        });
+
+        setEvents(list);
+      } catch {
+        setEvents([]);
+      } finally {
+        setLoadingEvents(false);
+      }
+    }
+
+    loadEvents();
+  }, [booking]);
+
   if (!booking) return null;
 
   const isPaid =
@@ -68,7 +141,7 @@ export default function BookingDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+      <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b p-6">
           <div>
             <h3 className="text-xl font-semibold">{booking.name}</h3>
@@ -85,22 +158,17 @@ export default function BookingDetailModal({
           </button>
         </div>
 
-        <div className="grid gap-6 p-6 md:grid-cols-2">
-          <div className="space-y-4">
+        <div className="grid gap-6 p-6 lg:grid-cols-3">
+          <div className="space-y-4 lg:col-span-1">
             <InfoRow label="Phone" value={booking.phone} />
             <InfoRow label="Guests" value={String(booking.guests)} />
             <InfoRow label="Package" value={booking.tier} />
             <InfoRow label="Paid" value={isPaid ? "Yes" : "No"} />
-            <InfoRow
-              label="Deposit"
-              value={formatMoney(booking.depositAmount)}
-            />
+            <InfoRow label="Deposit" value={formatMoney(booking.depositAmount)} />
             <InfoRow label="Total" value={formatMoney(booking.totalAmount)} />
             {booking.paidAt && <InfoRow label="Paid At" value={booking.paidAt} />}
-          </div>
 
-          <div>
-            <div className="mb-4">
+            <div>
               <div className="text-sm text-gray-500">Status</div>
               <div className="mt-2">
                 <span
@@ -112,28 +180,55 @@ export default function BookingDetailModal({
                 </span>
               </div>
             </div>
+          </div>
 
-            <div>
-              <div className="text-sm text-gray-500">Add-Ons</div>
-              <div className="mt-2 rounded-xl border bg-gray-50 p-4">
-                {booking.addOns && booking.addOns.length > 0 ? (
-                  <div className="space-y-2">
-                    {booking.addOns.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <span>{item.label}</span>
-                        <span className="font-medium">
-                          {formatMoney(item.price)}
-                        </span>
+          <div className="lg:col-span-1">
+            <div className="text-sm text-gray-500">Add-Ons</div>
+            <div className="mt-2 rounded-xl border bg-gray-50 p-4">
+              {booking.addOns && booking.addOns.length > 0 ? (
+                <div className="space-y-2">
+                  {booking.addOns.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span>{item.label}</span>
+                      <span className="font-medium">
+                        {formatMoney(item.price)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500">No add-ons selected</div>
+              )}
+            </div>
+          </div>
+
+          <div className="lg:col-span-1">
+            <div className="text-sm text-gray-500">Booking Timeline</div>
+            <div className="mt-2 rounded-xl border bg-gray-50 p-4 max-h-[320px] overflow-y-auto">
+              {loadingEvents ? (
+                <div className="text-sm text-gray-500">Loading timeline...</div>
+              ) : events.length === 0 ? (
+                <div className="text-sm text-gray-500">No activity yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {events.map((event) => (
+                    <div key={event.id} className="rounded-xl border bg-white p-3">
+                      <div className="text-xs uppercase tracking-wide text-gray-500">
+                        {event.type}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-gray-500">No add-ons selected</div>
-                )}
-              </div>
+                      <div className="mt-1 text-sm font-medium">
+                        {event.message}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        {formatEventTime(event.createdAt)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
