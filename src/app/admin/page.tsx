@@ -10,6 +10,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import AdminShell from "@/components/AdminShell";
+import BookingDetailModal from "@/components/BookingDetailModal";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,11 @@ type Booking = {
   depositAmount: number;
   status: string;
   paidAt?: string;
+  addOns?: Array<{
+    id: string;
+    label: string;
+    price: number;
+  }>;
 };
 
 function todayStr() {
@@ -61,6 +68,7 @@ export default function AdminDashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   async function loadBookings(selectedDate: string) {
     setLoading(true);
@@ -93,17 +101,18 @@ export default function AdminDashboardPage() {
 
   async function updateStatus(id: string, status: string) {
     setMessage(null);
+
     try {
       await updateDoc(doc(db, "bookings", id), { status });
 
-      // keep slot lock in sync
       try {
         await updateDoc(doc(db, "slotLocks", id), { status });
       } catch {
-        // ignore if lock doc missing
+        // ignore if missing
       }
 
       await loadBookings(date);
+      setSelectedBooking(null);
       setMessage(`Booking updated to ${status} ✅`);
     } catch (err: any) {
       setMessage(err?.message ?? "Failed to update booking");
@@ -112,6 +121,7 @@ export default function AdminDashboardPage() {
 
   async function copyConfirmationMessage(booking: Booking) {
     const text = `Hi ${booking.name}, your ${booking.timeSlot} LuxeBoat ride is confirmed. Please arrive 15 minutes early. Late arrivals after 30 minutes will be cancelled as per policy.`;
+
     try {
       await navigator.clipboard.writeText(text);
       setMessage("Confirmation message copied ✅");
@@ -130,141 +140,116 @@ export default function AdminDashboardPage() {
   }, [bookings]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-2xl shadow p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Manage bookings, confirmations, and trip status.
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="date" className="block text-sm font-medium">
-                View Date
-              </label>
-              <input
-                id="date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="mt-1 border rounded-xl p-3"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+    <AdminShell
+      title="Admin Dashboard"
+      subtitle="Manage bookings, confirmations, and trip operations from one place."
+    >
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
             <StatCard label="Total" value={summary.total} />
             <StatCard label="Booked" value={summary.booked} />
             <StatCard label="Confirmed" value={summary.confirmed} />
             <StatCard label="Completed" value={summary.completed} />
           </div>
 
-          {message && (
-            <div className="mt-4 rounded-xl bg-gray-100 px-4 py-3 text-sm text-gray-700">
-              {message}
-            </div>
-          )}
-
-          <div className="mt-6 overflow-x-auto">
-            {loading ? (
-              <div className="py-8 text-gray-500">Loading bookings...</div>
-            ) : bookings.length === 0 ? (
-              <div className="py-8 text-gray-500">No bookings for this date.</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b">
-                    <th className="py-3 pr-4">Time</th>
-                    <th className="py-3 pr-4">Name</th>
-                    <th className="py-3 pr-4">Guests</th>
-                    <th className="py-3 pr-4">Package</th>
-                    <th className="py-3 pr-4">Paid</th>
-                    <th className="py-3 pr-4">Status</th>
-                    <th className="py-3 pr-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookings.map((booking) => {
-                    const isPaid =
-                      booking.status === "booked" ||
-                      booking.status === "confirmed" ||
-                      booking.status === "completed";
-
-                    return (
-                      <tr key={booking.id} className="border-b align-top">
-                        <td className="py-4 pr-4 font-medium">{booking.timeSlot}</td>
-                        <td className="py-4 pr-4">
-                          <div className="font-medium">{booking.name}</div>
-                          <div className="text-gray-500">{booking.phone}</div>
-                        </td>
-                        <td className="py-4 pr-4">{booking.guests}</td>
-                        <td className="py-4 pr-4 capitalize">{booking.tier}</td>
-                        <td className="py-4 pr-4">
-                          <div>{isPaid ? "Yes" : "No"}</div>
-                          <div className="text-gray-500">
-                            Deposit: {formatMoney(booking.depositAmount)}
-                          </div>
-                        </td>
-                        <td className="py-4 pr-4">
-                          <span
-                            className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${statusBadge(
-                              booking.status
-                            )}`}
-                          >
-                            {booking.status}
-                          </span>
-                        </td>
-                        <td className="py-4 pr-4">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => updateStatus(booking.id, "confirmed")}
-                              className="rounded-lg border px-3 py-2"
-                            >
-                              Confirm
-                            </button>
-
-                            <button
-                              onClick={() => updateStatus(booking.id, "cancelled")}
-                              className="rounded-lg border px-3 py-2"
-                            >
-                              Cancel
-                            </button>
-
-                            <button
-                              onClick={() => updateStatus(booking.id, "booked")}
-                              className="rounded-lg border px-3 py-2"
-                            >
-                              Reschedule
-                            </button>
-
-                            <button
-                              onClick={() => updateStatus(booking.id, "completed")}
-                              className="rounded-lg border px-3 py-2"
-                            >
-                              Mark Completed
-                            </button>
-
-                            <button
-                              onClick={() => copyConfirmationMessage(booking)}
-                              className="rounded-lg bg-black text-white px-3 py-2"
-                            >
-                              Copy WhatsApp Message
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+          <div className="min-w-[180px]">
+            <label htmlFor="date" className="block text-sm font-medium">
+              View Date
+            </label>
+            <input
+              id="date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="mt-1 w-full rounded-xl border p-3"
+            />
           </div>
         </div>
+
+        {message && (
+          <div className="rounded-xl bg-gray-100 px-4 py-3 text-sm text-gray-700">
+            {message}
+          </div>
+        )}
+
+        <div className="rounded-2xl border bg-white overflow-hidden">
+          {loading ? (
+            <div className="p-6 text-gray-500">Loading bookings...</div>
+          ) : bookings.length === 0 ? (
+            <div className="p-6 text-gray-500">No bookings for this date.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr className="text-left">
+                  <th className="py-4 px-4">Time</th>
+                  <th className="py-4 px-4">Name</th>
+                  <th className="py-4 px-4">Guests</th>
+                  <th className="py-4 px-4">Package</th>
+                  <th className="py-4 px-4">Paid</th>
+                  <th className="py-4 px-4">Status</th>
+                  <th className="py-4 px-4">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {bookings.map((booking) => {
+                  const isPaid =
+                    booking.status === "booked" ||
+                    booking.status === "confirmed" ||
+                    booking.status === "completed";
+
+                  return (
+                    <tr key={booking.id} className="border-b">
+                      <td className="py-4 px-4 font-medium">{booking.timeSlot}</td>
+                      <td className="py-4 px-4">
+                        <div className="font-medium">{booking.name}</div>
+                        <div className="text-gray-500">{booking.phone}</div>
+                      </td>
+                      <td className="py-4 px-4">{booking.guests}</td>
+                      <td className="py-4 px-4 capitalize">{booking.tier}</td>
+                      <td className="py-4 px-4">
+                        <div>{isPaid ? "Yes" : "No"}</div>
+                        <div className="text-gray-500">
+                          {formatMoney(booking.depositAmount)}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span
+                          className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${statusBadge(
+                            booking.status
+                          )}`}
+                        >
+                          {booking.status}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <button
+                          onClick={() => setSelectedBooking(booking)}
+                          className="rounded-lg border px-3 py-2"
+                        >
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
-    </div>
+
+      <BookingDetailModal
+        booking={selectedBooking}
+        onClose={() => setSelectedBooking(null)}
+        onConfirm={(id) => updateStatus(id, "confirmed")}
+        onCancel={(id) => updateStatus(id, "cancelled")}
+        onReschedule={(id) => updateStatus(id, "booked")}
+        onMarkCompleted={(id) => updateStatus(id, "completed")}
+        onCopyMessage={copyConfirmationMessage}
+      />
+    </AdminShell>
   );
 }
 
