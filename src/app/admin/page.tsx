@@ -34,6 +34,14 @@ type Booking = {
   }>;
 };
 
+type StatusFilter =
+  | "all"
+  | "pending_payment"
+  | "booked"
+  | "confirmed"
+  | "cancelled"
+  | "completed";
+
 function todayStr() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -70,12 +78,18 @@ export default function AdminDashboardPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
   async function loadBookings(selectedDate: string) {
     setLoading(true);
     setMessage(null);
 
     try {
-      const q = query(collection(db, "bookings"), where("date", "==", selectedDate));
+      const q = query(
+        collection(db, "bookings"),
+        where("date", "==", selectedDate)
+      );
       const snap = await getDocs(q);
 
       const list: Booking[] = [];
@@ -108,7 +122,7 @@ export default function AdminDashboardPage() {
       try {
         await updateDoc(doc(db, "slotLocks", id), { status });
       } catch {
-        // ignore if missing
+        // ignore if lock doc missing
       }
 
       await loadBookings(date);
@@ -130,14 +144,35 @@ export default function AdminDashboardPage() {
     }
   }
 
+  const filteredBookings = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+
+    return bookings.filter((booking) => {
+      const matchesStatus =
+        statusFilter === "all" ? true : booking.status === statusFilter;
+
+      const matchesSearch =
+        term.length === 0
+          ? true
+          : booking.name.toLowerCase().includes(term) ||
+            booking.phone.toLowerCase().includes(term);
+
+      return matchesStatus && matchesSearch;
+    });
+  }, [bookings, searchTerm, statusFilter]);
+
   const summary = useMemo(() => {
-    const total = bookings.length;
-    const booked = bookings.filter((b) => b.status === "booked").length;
-    const confirmed = bookings.filter((b) => b.status === "confirmed").length;
-    const completed = bookings.filter((b) => b.status === "completed").length;
+    const total = filteredBookings.length;
+    const booked = filteredBookings.filter((b) => b.status === "booked").length;
+    const confirmed = filteredBookings.filter(
+      (b) => b.status === "confirmed"
+    ).length;
+    const completed = filteredBookings.filter(
+      (b) => b.status === "completed"
+    ).length;
 
     return { total, booked, confirmed, completed };
-  }, [bookings]);
+  }, [filteredBookings]);
 
   return (
     <AdminShell
@@ -145,25 +180,62 @@ export default function AdminDashboardPage() {
       subtitle="Manage bookings, confirmations, and trip operations from one place."
     >
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
-            <StatCard label="Total" value={summary.total} />
-            <StatCard label="Booked" value={summary.booked} />
-            <StatCard label="Confirmed" value={summary.confirmed} />
-            <StatCard label="Completed" value={summary.completed} />
-          </div>
+        <div className="grid gap-4 lg:grid-cols-4">
+          <StatCard label="Showing" value={summary.total} />
+          <StatCard label="Booked" value={summary.booked} />
+          <StatCard label="Confirmed" value={summary.confirmed} />
+          <StatCard label="Completed" value={summary.completed} />
+        </div>
 
-          <div className="min-w-[180px]">
-            <label htmlFor="date" className="block text-sm font-medium">
-              View Date
-            </label>
-            <input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="mt-1 w-full rounded-xl border p-3"
-            />
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label htmlFor="date" className="block text-sm font-medium">
+                View Date
+              </label>
+              <input
+                id="date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="mt-1 w-full rounded-xl border p-3"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="search" className="block text-sm font-medium">
+                Search Customer
+              </label>
+              <input
+                id="search"
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by name or phone"
+                className="mt-1 w-full rounded-xl border p-3"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium">
+                Filter by Status
+              </label>
+              <select
+                id="status"
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as StatusFilter)
+                }
+                className="mt-1 w-full rounded-xl border p-3"
+              >
+                <option value="all">All Statuses</option>
+                <option value="pending_payment">Pending Payment</option>
+                <option value="booked">Booked</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -176,8 +248,10 @@ export default function AdminDashboardPage() {
         <div className="rounded-2xl border bg-white overflow-hidden">
           {loading ? (
             <div className="p-6 text-gray-500">Loading bookings...</div>
-          ) : bookings.length === 0 ? (
-            <div className="p-6 text-gray-500">No bookings for this date.</div>
+          ) : filteredBookings.length === 0 ? (
+            <div className="p-6 text-gray-500">
+              No bookings match your search or filter.
+            </div>
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
@@ -193,7 +267,7 @@ export default function AdminDashboardPage() {
               </thead>
 
               <tbody>
-                {bookings.map((booking) => {
+                {filteredBookings.map((booking) => {
                   const isPaid =
                     booking.status === "booked" ||
                     booking.status === "confirmed" ||
@@ -201,7 +275,9 @@ export default function AdminDashboardPage() {
 
                   return (
                     <tr key={booking.id} className="border-b">
-                      <td className="py-4 px-4 font-medium">{booking.timeSlot}</td>
+                      <td className="py-4 px-4 font-medium">
+                        {booking.timeSlot}
+                      </td>
                       <td className="py-4 px-4">
                         <div className="font-medium">{booking.name}</div>
                         <div className="text-gray-500">{booking.phone}</div>
