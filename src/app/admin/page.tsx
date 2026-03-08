@@ -14,6 +14,7 @@ import AdminShell from "@/components/AdminShell";
 import BookingDetailModal from "@/components/BookingDetailModal";
 import RescheduleModal from "@/components/RescheduleModal";
 import { logBookingEvent } from "@/lib/bookingEvents";
+import { runAutoCancelSweepForDate } from "@/lib/bookingAutomation";
 
 export const dynamic = "force-dynamic";
 
@@ -59,17 +60,17 @@ function formatMoney(amount: number) {
 function statusBadge(status: string) {
   switch (status) {
     case "confirmed":
-      return "bg-green-100 text-green-700";
+      return "bg-emerald-100 text-emerald-700";
     case "booked":
-      return "bg-blue-100 text-blue-700";
+      return "bg-sky-100 text-sky-700";
     case "completed":
-      return "bg-gray-200 text-gray-800";
+      return "bg-slate-200 text-slate-800";
     case "cancelled":
-      return "bg-red-100 text-red-700";
+      return "bg-rose-100 text-rose-700";
     case "pending_payment":
-      return "bg-yellow-100 text-yellow-700";
+      return "bg-amber-100 text-amber-700";
     default:
-      return "bg-gray-100 text-gray-700";
+      return "bg-slate-100 text-slate-700";
   }
 }
 
@@ -79,7 +80,9 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
+  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(
+    null
+  );
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -89,6 +92,8 @@ export default function AdminDashboardPage() {
     setMessage(null);
 
     try {
+      await runAutoCancelSweepForDate(selectedDate);
+
       const q = query(
         collection(db, "bookings"),
         where("date", "==", selectedDate)
@@ -125,14 +130,14 @@ export default function AdminDashboardPage() {
       try {
         await updateDoc(doc(db, "slotLocks", id), { status });
       } catch {
-        // ignore if lock doc missing
+        // ignore if missing
       }
 
       const eventMessageMap: Record<string, string> = {
-        confirmed: "Booking confirmed by admin",
-        cancelled: "Booking cancelled by admin",
-        completed: "Booking marked as completed",
-        booked: "Booking status returned to booked",
+        confirmed: "Booking confirmed by admin after operational check.",
+        cancelled: "Booking cancelled by admin.",
+        completed: "Booking marked as completed.",
+        booked: "Booking status returned to booked.",
       };
 
       if (eventMessageMap[status]) {
@@ -153,7 +158,6 @@ export default function AdminDashboardPage() {
 
   async function copyConfirmationMessage(booking: Booking) {
     const text = `Hi ${booking.name}, your ${booking.timeSlot} LuxeBoat ride is confirmed. Please arrive 15 minutes early. Late arrivals after 30 minutes will be cancelled as per policy.`;
-
     try {
       await navigator.clipboard.writeText(text);
       setMessage("Confirmation message copied ✅");
@@ -195,7 +199,7 @@ export default function AdminDashboardPage() {
   return (
     <AdminShell
       title="Admin Dashboard"
-      subtitle="Manage bookings, confirmations, and trip operations from one place."
+      subtitle="Manage bookings, confirmations, and operational control from one screen."
     >
       <div className="flex flex-col gap-6">
         <div className="grid gap-4 lg:grid-cols-4">
@@ -205,7 +209,7 @@ export default function AdminDashboardPage() {
           <StatCard label="Completed" value={summary.completed} />
         </div>
 
-        <div className="rounded-2xl border bg-white p-4">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <label htmlFor="date" className="block text-sm font-medium">
@@ -216,7 +220,7 @@ export default function AdminDashboardPage() {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="mt-1 w-full rounded-xl border p-3"
+                className="mt-1 w-full rounded-2xl border p-3"
               />
             </div>
 
@@ -230,7 +234,7 @@ export default function AdminDashboardPage() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search by name or phone"
-                className="mt-1 w-full rounded-xl border p-3"
+                className="mt-1 w-full rounded-2xl border p-3"
               />
             </div>
 
@@ -244,7 +248,7 @@ export default function AdminDashboardPage() {
                 onChange={(e) =>
                   setStatusFilter(e.target.value as StatusFilter)
                 }
-                className="mt-1 w-full rounded-xl border p-3"
+                className="mt-1 w-full rounded-2xl border p-3"
               >
                 <option value="all">All Statuses</option>
                 <option value="pending_payment">Pending Payment</option>
@@ -258,21 +262,21 @@ export default function AdminDashboardPage() {
         </div>
 
         {message && (
-          <div className="rounded-xl bg-gray-100 px-4 py-3 text-sm text-gray-700">
+          <div className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-700">
             {message}
           </div>
         )}
 
-        <div className="rounded-2xl border bg-white overflow-hidden">
+        <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-sm">
           {loading ? (
-            <div className="p-6 text-gray-500">Loading bookings...</div>
+            <div className="p-6 text-slate-500">Loading bookings...</div>
           ) : filteredBookings.length === 0 ? (
-            <div className="p-6 text-gray-500">
+            <div className="p-6 text-slate-500">
               No bookings match your search or filter.
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-slate-50 border-b">
                 <tr className="text-left">
                   <th className="py-4 px-4">Time</th>
                   <th className="py-4 px-4">Name</th>
@@ -298,13 +302,13 @@ export default function AdminDashboardPage() {
                       </td>
                       <td className="py-4 px-4">
                         <div className="font-medium">{booking.name}</div>
-                        <div className="text-gray-500">{booking.phone}</div>
+                        <div className="text-slate-500">{booking.phone}</div>
                       </td>
                       <td className="py-4 px-4">{booking.guests}</td>
                       <td className="py-4 px-4 capitalize">{booking.tier}</td>
                       <td className="py-4 px-4">
                         <div>{isPaid ? "Yes" : "No"}</div>
-                        <div className="text-gray-500">
+                        <div className="text-slate-500">
                           {formatMoney(booking.depositAmount)}
                         </div>
                       </td>
@@ -321,14 +325,14 @@ export default function AdminDashboardPage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => setSelectedBooking(booking)}
-                            className="rounded-lg border px-3 py-2"
+                            className="rounded-xl border px-3 py-2"
                           >
                             View Details
                           </button>
 
                           <button
                             onClick={() => setRescheduleBooking(booking)}
-                            className="rounded-lg border px-3 py-2"
+                            className="rounded-xl border px-3 py-2"
                           >
                             Reschedule
                           </button>
@@ -371,8 +375,8 @@ export default function AdminDashboardPage() {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border bg-gray-50 p-4">
-      <div className="text-sm text-gray-500">{label}</div>
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="text-sm text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold">{value}</div>
     </div>
   );
