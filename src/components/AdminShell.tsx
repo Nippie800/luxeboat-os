@@ -12,6 +12,7 @@ type Props = {
 
 const navItems = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/trip-sheet", label: "Trip Sheet" },
   { href: "/admin/settings", label: "Settings" },
   { href: "/book", label: "Booking Page" },
 ];
@@ -20,10 +21,9 @@ export default function AdminShell({ children, title, subtitle }: Props) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="flex min-h-screen">
-        {/* Sidebar */}
-        <aside className="hidden md:flex w-64 flex-col border-r bg-white">
+    <div className="min-h-screen bg-gray-50 print:bg-white">
+      <div className="flex min-h-screen print:block">
+        <aside className="hidden md:flex w-64 flex-col border-r bg-white print:hidden">
           <div className="p-6 border-b">
             <h1 className="text-xl font-semibold">LuxeBoat OS</h1>
             <p className="text-sm text-gray-500 mt-1">Admin Control Panel</p>
@@ -53,18 +53,15 @@ export default function AdminShell({ children, title, subtitle }: Props) {
           </div>
         </aside>
 
-        {/* Main */}
         <main className="flex-1">
-          <div className="border-b bg-white px-6 py-5">
-            <h2 className="text-2xl font-semibold">
-              {title ?? "Admin Dashboard"}
-            </h2>
+          <div className="border-b bg-white px-6 py-5 print:border-b-0 print:px-0 print:py-0 print:mb-4">
+            <h2 className="text-2xl font-semibold">{title ?? "Admin"}</h2>
             {subtitle && (
               <p className="mt-1 text-sm text-gray-600">{subtitle}</p>
             )}
           </div>
 
-          <div className="p-6">{children}</div>
+          <div className="p-6 print:p-0">{children}</div>
         </main>
       </div>
     </div>
