@@ -16,6 +16,7 @@ import BookingDetailModal from "@/components/BookingDetailModal";
 import RescheduleModal from "@/components/RescheduleModal";
 import { logBookingEvent } from "@/lib/bookingEvents";
 import { runAutoCancelSweepForDate } from "@/lib/bookingAutomation";
+import BoatTimeline from "@/components/BoatTimeline";
 
 export const dynamic = "force-dynamic";
 
@@ -223,6 +224,7 @@ export default function AdminDashboardPage() {
             value={`${analytics.guestExperience}%`}
           />
         </div>
+        <BoatTimeline bookings={filteredBookings} />
 
         {smoothSailing && (
           <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
@@ -399,17 +401,16 @@ export default function AdminDashboardPage() {
       </div>
 
       <BookingDetailModal
-        booking={selectedBooking}
-        onClose={() => setSelectedBooking(null)}
-        onConfirm={(id) => updateStatus(id, "confirmed")}
-        onCancel={(id) => updateStatus(id, "cancelled")}
-        onMarkCompleted={(id) => updateStatus(id, "completed")}
-        onReschedule={(id) => {
-          const booking = bookings.find((b) => b.id === id) || null;
-          setRescheduleBooking(booking);
-        }}
-        onCopyMessage={openWhatsApp}
-      />
+  booking={selectedBooking}
+  onClose={() => setSelectedBooking(null)}
+  onConfirm={(id) => updateStatus(id, "confirmed")}
+  onCancel={(id) => updateStatus(id, "cancelled")}
+  onMarkCompleted={(id) => updateStatus(id, "completed")}
+  onReschedule={(id) => {
+    const booking = bookings.find((b) => b.id === id) || null;
+    setRescheduleBooking(booking);
+  }}
+/>
 
       <RescheduleModal
         booking={rescheduleBooking}

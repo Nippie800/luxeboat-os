@@ -44,7 +44,6 @@ type Props = {
   onCancel: (id: string) => void;
   onMarkCompleted: (id: string) => void;
   onReschedule: (id: string) => void;
-  onCopyMessage: (booking: Booking) => void;
 };
 
 function formatMoney(amount: number) {
@@ -93,7 +92,6 @@ export default function BookingDetailModal({
   onCancel,
   onMarkCompleted,
   onReschedule,
-  onCopyMessage,
 }: Props) {
   const [events, setEvents] = useState<BookingEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -139,9 +137,20 @@ export default function BookingDetailModal({
     booking.status === "confirmed" ||
     booking.status === "completed";
 
+  function sendWhatsApp() {
+    const msg = encodeURIComponent(
+      `Hi ${booking!.name}, your ${booking!.timeSlot} LuxeBoat ride is confirmed. Please arrive 15 minutes early.`
+    );
+
+    window.open(`https://wa.me/${booking!.phone}?text=${msg}`);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl">
+
+        {/* HEADER */}
+
         <div className="flex items-start justify-between border-b p-6">
           <div>
             <h3 className="text-xl font-semibold">{booking.name}</h3>
@@ -158,116 +167,151 @@ export default function BookingDetailModal({
           </button>
         </div>
 
+        {/* BODY */}
+
         <div className="grid gap-6 p-6 lg:grid-cols-3">
-          <div className="space-y-4 lg:col-span-1">
+
+          {/* INFO */}
+
+          <div className="space-y-4">
             <InfoRow label="Phone" value={booking.phone} />
             <InfoRow label="Guests" value={String(booking.guests)} />
             <InfoRow label="Package" value={booking.tier} />
             <InfoRow label="Paid" value={isPaid ? "Yes" : "No"} />
             <InfoRow label="Deposit" value={formatMoney(booking.depositAmount)} />
             <InfoRow label="Total" value={formatMoney(booking.totalAmount)} />
-            {booking.paidAt && <InfoRow label="Paid At" value={booking.paidAt} />}
+
+            {booking.paidAt && (
+              <InfoRow label="Paid At" value={booking.paidAt} />
+            )}
 
             <div>
               <div className="text-sm text-gray-500">Status</div>
-              <div className="mt-2">
-                <span
-                  className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${statusBadge(
-                    booking.status
-                  )}`}
-                >
-                  {booking.status}
-                </span>
-              </div>
+
+              <span
+                className={`inline-block mt-2 rounded-full px-3 py-1 text-xs font-medium ${statusBadge(
+                  booking.status
+                )}`}
+              >
+                {booking.status}
+              </span>
             </div>
           </div>
 
-          <div className="lg:col-span-1">
+          {/* ADDONS */}
+
+          <div>
             <div className="text-sm text-gray-500">Add-Ons</div>
+
             <div className="mt-2 rounded-xl border bg-gray-50 p-4">
-              {booking.addOns && booking.addOns.length > 0 ? (
-                <div className="space-y-2">
-                  {booking.addOns.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span>{item.label}</span>
-                      <span className="font-medium">
-                        {formatMoney(item.price)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              {booking.addOns?.length ? (
+                booking.addOns.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex justify-between text-sm"
+                  >
+                    <span>{item.label}</span>
+                    <span>{formatMoney(item.price)}</span>
+                  </div>
+                ))
               ) : (
-                <div className="text-sm text-gray-500">No add-ons selected</div>
+                <div className="text-sm text-gray-500">
+                  No add-ons selected
+                </div>
               )}
             </div>
           </div>
 
-          <div className="lg:col-span-1">
+          {/* TIMELINE */}
+
+          <div>
             <div className="text-sm text-gray-500">Booking Timeline</div>
+
             <div className="mt-2 rounded-xl border bg-gray-50 p-4 max-h-[320px] overflow-y-auto">
+
               {loadingEvents ? (
-                <div className="text-sm text-gray-500">Loading timeline...</div>
+                <div className="text-sm text-gray-500">
+                  Loading timeline...
+                </div>
               ) : events.length === 0 ? (
-                <div className="text-sm text-gray-500">No activity yet.</div>
+                <div className="text-sm text-gray-500">
+                  No activity yet.
+                </div>
               ) : (
                 <div className="space-y-3">
+
                   {events.map((event) => (
-                    <div key={event.id} className="rounded-xl border bg-white p-3">
-                      <div className="text-xs uppercase tracking-wide text-gray-500">
+                    <div
+                      key={event.id}
+                      className="rounded-xl border bg-white p-3"
+                    >
+                      <div className="text-xs uppercase text-gray-500">
                         {event.type}
                       </div>
-                      <div className="mt-1 text-sm font-medium">
+
+                      <div className="text-sm font-medium mt-1">
                         {event.message}
                       </div>
-                      <div className="mt-1 text-xs text-gray-500">
+
+                      <div className="text-xs text-gray-500 mt-1">
                         {formatEventTime(event.createdAt)}
                       </div>
                     </div>
                   ))}
+
                 </div>
               )}
+
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 border-t p-6">
-          <button
-            onClick={() => onConfirm(booking.id)}
-            className="rounded-lg border px-4 py-2 text-sm"
-          >
-            Confirm
-          </button>
+        {/* ACTIONS */}
 
-          <button
-            onClick={() => onCancel(booking.id)}
-            className="rounded-lg border px-4 py-2 text-sm"
-          >
-            Cancel
-          </button>
+        <div className="flex flex-wrap gap-2 border-t p-6">
+
+          {booking.status === "booked" && (
+            <button
+              onClick={() => onConfirm(booking.id)}
+              className="bg-emerald-500 text-white px-4 py-2 rounded-lg"
+            >
+              Confirm Booking
+            </button>
+          )}
+
+          {booking.status === "confirmed" && (
+            <button
+              onClick={() => onMarkCompleted(booking.id)}
+              className="bg-indigo-500 text-white px-4 py-2 rounded-lg"
+            >
+              Mark Completed
+            </button>
+          )}
+
+          {booking.status !== "cancelled" &&
+            booking.status !== "completed" && (
+              <button
+                onClick={() => onCancel(booking.id)}
+                className="bg-rose-500 text-white px-4 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            )}
 
           <button
             onClick={() => onReschedule(booking.id)}
-            className="rounded-lg border px-4 py-2 text-sm"
+            className="border px-4 py-2 rounded-lg"
           >
             Reschedule
           </button>
 
           <button
-            onClick={() => onMarkCompleted(booking.id)}
-            className="rounded-lg border px-4 py-2 text-sm"
+            onClick={sendWhatsApp}
+            className="bg-green-500 text-white px-4 py-2 rounded-lg"
           >
-            Mark Completed
+            Send WhatsApp
           </button>
 
-          <button
-            onClick={() => onCopyMessage(booking)}
-            className="rounded-lg bg-black px-4 py-2 text-sm text-white"
-          >
-            Copy WhatsApp Message
-          </button>
         </div>
       </div>
     </div>
